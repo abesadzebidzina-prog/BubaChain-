@@ -1,5 +1,5 @@
 // src/wallet.js
-// EIP-1193 wallet connect + switch to Base + sign message + verified persistence.
+// EIP-1193 wallet connect + switch to Base + sign proof including Farcaster user info.
 // No transactions.
 
 const BASE_MAINNET = {
@@ -11,7 +11,7 @@ const BASE_MAINNET = {
   blockExplorerUrls: ["https://basescan.org"],
 };
 
-const VERIFY_KEY = "bubachain:wallet_verified:v1";
+const VERIFY_KEY = "bubachain:wallet_verified:v2";
 
 function pickProvider() {
   if (typeof window !== "undefined" && window.ethereum) return window.ethereum;
@@ -36,7 +36,7 @@ function saveVerified(map) {
   localStorage.setItem(VERIFY_KEY, JSON.stringify(map));
 }
 
-export function createWalletController({ onUpdate } = {}) {
+export function createWalletController({ onUpdate, getFarcasterUser } = {}) {
   const provider = pickProvider();
 
   const state = {
@@ -46,7 +46,8 @@ export function createWalletController({ onUpdate } = {}) {
     addressShort: "",
     chainId: null,
     chainName: "—",
-    verified: false, // signature stored for this address
+    verified: false,
+    fc: null, // { fid, username, displayName } if available
     provider,
   };
 
@@ -55,6 +56,17 @@ export function createWalletController({ onUpdate } = {}) {
   function syncVerifiedFlag() {
     const map = loadVerified();
     state.verified = !!(state.address && map[state.address?.toLowerCase()]);
+  }
+
+  async function refreshFarcaster() {
+    if (typeof getFarcasterUser !== "function") return null;
+    try {
+      state.fc = await getFarcasterUser();
+    } catch {
+      state.fc = null;
+    }
+    notify();
+    return state.fc;
   }
 
   async function refresh() {
@@ -75,6 +87,7 @@ export function createWalletController({ onUpdate } = {}) {
       syncVerifiedFlag();
     } catch {}
 
+    await refreshFarcaster();
     notify();
     return state;
   }
@@ -92,7 +105,6 @@ export function createWalletController({ onUpdate } = {}) {
   }
 
   async function disconnect() {
-    // No universal disconnect in EIP-1193; we just clear UI state.
     state.connected = false;
     state.address = "";
     state.addressShort = "";
@@ -116,23 +128,32 @@ export function createWalletController({ onUpdate } = {}) {
     return state;
   }
 
+  function buildProofMessage() {
+    const domain = window.location.host;
+    const ts = new Date().toISOString();
+
+    const fid = state.fc?.fid ?? "unknown";
+    const username = state.fc?.username ?? "unknown";
+
+    return `BubaChain Wallet Link Proof
+
+Domain: ${domain}
+Farcaster FID: ${fid}
+Farcaster Username: ${username}
+Wallet: ${state.address}
+Time: ${ts}
+
+I confirm I control this wallet and link it to my Farcaster identity for BubaChain.`;
+  }
+
   async function signToVerify() {
     if (!provider) throw new Error("No wallet provider.");
     if (!state.connected || !state.address) throw new Error("Connect wallet first.");
 
-    const domain = window.location.host;
-    const ts = new Date().toISOString();
+    // Ensure we have freshest FC data
+    await refreshFarcaster();
 
-    const message =
-`BubaChain Wallet Verification
-
-Domain: ${domain}
-Address: ${state.address}
-Time: ${ts}
-
-I verify I control this wallet for BubaChain.`;
-
-    // personal_sign params are [message, address]
+    const message = buildProofMessage();
     const signature = await req(provider, "personal_sign", [message, state.address]);
 
     const map = loadVerified();
@@ -140,6 +161,7 @@ I verify I control this wallet for BubaChain.`;
       message,
       signature,
       verifiedAt: Date.now(),
+      fc: state.fc || null,
     };
     saveVerified(map);
 
@@ -152,7 +174,6 @@ I verify I control this wallet for BubaChain.`;
     if (!provider) throw new Error("No wallet provider.");
     if (!state.connected || !state.address) throw new Error("Connect wallet first.");
 
-    // Harmless estimate: 0-value tx to yourself with empty data (no send)
     const gas = await req(provider, "eth_estimateGas", [{
       from: state.address,
       to: state.address,
@@ -192,6 +213,7 @@ I verify I control this wallet for BubaChain.`;
     switchToBase,
     signToVerify,
     estimateGasTest,
+    refreshFarcaster,
     BASE_MAINNET,
   };
 }

@@ -12,7 +12,7 @@ import {
   msToHMS,
   format,
 } from "./game.js";
-import { initMiniApp } from "./miniapp.js";
+import { initMiniApp, getFarcasterUser } from "./miniapp.js";
 import { createWalletController } from "./wallet.js";
 
 const state = loadState();
@@ -20,9 +20,6 @@ initMiniApp().catch(() => {});
 const $ = (sel) => document.querySelector(sel);
 
 function walletMultiplier(walletState) {
-  // Rewards:
-  // - Connected: +10%
-  // - Verified (signed): +25%
   if (!walletState?.connected) return 1;
   return walletState.verified ? 1.25 : 1.10;
 }
@@ -86,14 +83,17 @@ function buildUI() {
       </section>
 
       <section class="card">
-        <div class="h2">Wallet (Base / EVM)</div>
+        <div class="h2">Identity</div>
+        <div class="muted" id="fcMeta">Farcaster: not detected</div>
+
+        <div class="h2" style="margin-top:14px;">Wallet (Base / EVM)</div>
 
         <div class="row" style="margin-top:8px;">
           <div class="muted" id="walletMeta">Not connected</div>
           <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
             <button class="btn" id="walletConnectBtn">Connect</button>
             <button class="btn ghost" id="walletSwitchBtn" disabled>Switch to Base</button>
-            <button class="btn ghost" id="walletSignBtn" disabled>Sign to Verify</button>
+            <button class="btn ghost" id="walletSignBtn" disabled>Sign Link Proof</button>
           </div>
         </div>
 
@@ -191,10 +191,22 @@ function renderFrame(snapshot, walletState) {
   renderUpgrades();
 }
 
-function start() {
+async function start() {
   buildUI();
 
+  // Show Farcaster identity (if available)
+  const fc = await getFarcasterUser();
+  const fcMeta = $("#fcMeta");
+  if (fc) {
+    const name = fc.displayName || fc.username || "User";
+    const handle = fc.username ? `@${fc.username}` : "";
+    fcMeta.textContent = `Farcaster: ${name} ${handle} • FID ${fc.fid ?? "?"}`;
+  } else {
+    fcMeta.textContent = "Farcaster: not detected (open inside Farcaster to see identity)";
+  }
+
   const wallet = createWalletController({
+    getFarcasterUser,
     onUpdate: (w) => {
       const meta = $("#walletMeta");
       const connectBtn = $("#walletConnectBtn");
@@ -224,7 +236,7 @@ function start() {
         onchainMeta.textContent = "Connect wallet to prepare onchain";
         gasBtn.disabled = true;
       } else {
-        meta.textContent = `${w.addressShort} • ${w.chainName} • ${w.verified ? "Verified" : "Unverified"}`;
+        meta.textContent = `${w.addressShort} • ${w.chainName} • ${w.verified ? "Linked" : "Not linked"}`;
         connectBtn.textContent = "Disconnect";
 
         const onBase = (w.chainId === wallet.BASE_MAINNET.chainId);
@@ -233,8 +245,8 @@ function start() {
 
         const mult = walletMultiplier(w);
         bonusInfo.textContent = w.verified
-          ? `Wallet bonus: Verified ×${mult.toFixed(2)} earnings & daily`
-          : `Wallet bonus: Connected ×${mult.toFixed(2)} earnings & daily (sign to verify for more)`;
+          ? `Wallet bonus: Linked ×${mult.toFixed(2)} earnings & daily`
+          : `Wallet bonus: Connected ×${mult.toFixed(2)} earnings & daily (link for more)`;
 
         onchainMeta.textContent = onBase ? "Ready (Base)" : "Switch to Base to be ready";
         gasBtn.disabled = !onBase;
@@ -242,7 +254,7 @@ function start() {
     }
   });
 
-  wallet.refresh();
+  await wallet.refresh();
 
   $("#walletConnectBtn").addEventListener("click", async () => {
     try {
@@ -270,7 +282,7 @@ function start() {
   $("#walletSignBtn").addEventListener("click", async () => {
     try {
       const res = await wallet.signToVerify();
-      if (res?.ok) toast("Verified ✅");
+      if (res?.ok) toast("Linked ✅");
     } catch (e) {
       toast(e?.message || "Sign failed");
     }
@@ -286,7 +298,7 @@ function start() {
     }
   });
 
-  // Offline catch-up (uses wallet bonus if already connected/verified)
+  // Offline catch-up with current wallet multiplier
   const mult0 = walletMultiplier(wallet.state);
   const off = offlineCatchup(state, { walletMult: mult0 });
   if (off.applied > 0) {
