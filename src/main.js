@@ -1,200 +1,201 @@
+import "../style.css";
+import {
+  loadState,
+  saveState,
+  tick,
+  offlineCatchup,
+  buyUpgrade,
+  claimDaily,
+  computeUpgradeCost,
+  computeDailyReward,
+  isDailyReady,
+  msToHMS,
+  format,
+} from "./game.js";
 import { initMiniApp } from "./miniapp.js";
-import { createGame } from "./game.js";
-import { connectInjectedWallet, hasInjectedWallet, formatAddr, BASE_CHAIN_ID_HEX } from "./wallet.js";
 
-const $ = (id) => document.getElementById(id);
+const state = loadState();
+initMiniApp().catch(() => {});
 
-const pillStatus = $("pillStatus");
-const pillStorm = $("pillStorm");
+const $ = (sel) => document.querySelector(sel);
 
-const intro = $("intro");
-const btnCloseIntro = $("btnCloseIntro");
-const btnToggleSound = $("btnToggleSound");
+function buildUI() {
+  const root = $("#app");
+  root.innerHTML = `
+    <div class="wrap">
+      <header class="top">
+        <div class="title">
+          <div class="logo">⚡</div>
+          <div>
+            <h1>BubaChain</h1>
+            <div class="sub">Upgrade-only • Rare Storms • Daily</div>
+          </div>
+        </div>
+        <div class="stats">
+          <div class="stat">
+            <div class="k">BubaCoins</div>
+            <div class="v" id="bc">0</div>
+          </div>
+          <div class="stat">
+            <div class="k">BC/s</div>
+            <div class="v" id="bps">0</div>
+          </div>
+        </div>
+      </header>
 
-const balance = $("balance");
-const unclaimed = $("unclaimed");
-const daily = $("daily");
-const rate = $("rate");
-const tip = $("tip");
+      <section class="card storm" id="stormCard">
+        <div class="stormRow">
+          <div>
+            <div class="stormTitle" id="stormTitle">Calm</div>
+            <div class="stormSub" id="stormSub">Storms are rare & powerful.</div>
+          </div>
+          <div class="stormMeta" id="stormMeta"></div>
+        </div>
+        <div class="stormBar"><div class="stormFill" id="stormFill"></div></div>
+      </section>
 
-const btnStart = $("btnStart");
-const btnReset = $("btnReset");
+      <section class="card daily">
+        <div class="row">
+          <div>
+            <div class="h2">Daily Reward</div>
+            <div class="muted" id="dailyInfo">Come back every 24h.</div>
+          </div>
+          <button class="btn" id="dailyBtn">Claim</button>
+        </div>
+      </section>
 
-const fcUser = $("fcUser");
-const walletAddr = $("walletAddr");
-const chainInfo = $("chainInfo");
-const btnConnect = $("btnConnect");
-const btnDisconnect = $("btnDisconnect");
+      <section class="card upgrades">
+        <div class="h2">Upgrades</div>
+        <div class="list" id="upgradeList"></div>
+      </section>
 
-const btnWatchAd = $("btnWatchAd");
-const btnClaim = $("btnClaim");
-const claimInfo = $("claimInfo");
+      <footer class="foot muted">
+        Coins (BC) are in-game only, no guaranteed monetary value.
+      </footer>
 
-function beep(freq = 520, ms = 40, vol = 0.015) {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = "sine";
-    o.frequency.value = freq;
-    g.gain.value = vol;
-    o.connect(g); g.connect(ctx.destination);
-    o.start();
-    setTimeout(() => { o.stop(); ctx.close(); }, ms);
-  } catch {}
+      <div class="toast" id="toast"></div>
+      <div class="boom" id="boom"></div>
+    </div>
+  `;
+
+  $("#dailyBtn").addEventListener("click", () => {
+    const res = claimDaily(state);
+    if (!res.ok) return toast("Daily not ready yet.");
+    saveState(state);
+    toast(`+${format(res.reward)} BC claimed!`);
+  });
 }
 
-const game = createGame();
-const mini = await initMiniApp();
-
-if (mini?.context?.user) {
-  const u = mini.context.user;
-  const label = u.username ? `@${u.username}` : (u.displayName || "User");
-  fcUser.textContent = `${label} (FID ${u.fid})`;
-} else {
-  fcUser.textContent = mini?.inMiniApp ? "Mini App (no user info)" : "Not detected";
+function toast(msg) {
+  const el = $("#toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 1600);
 }
 
-btnCloseIntro.onclick = () => {
-  if (game.state.soundOn) beep();
-  intro.style.display = "none";
-  if (game.dailyAvailable()) {
-    game.claimDaily(Date.now());
-    tip.textContent = "Daily boost activated (+50% for 10 minutes).";
-    game.save();
-  }
-};
+function boom() {
+  const el = $("#boom");
+  el.classList.remove("go");
+  void el.offsetWidth; // reflow
+  el.classList.add("go");
+}
 
-btnToggleSound.onclick = () => {
-  game.state.soundOn = !game.state.soundOn;
-  btnToggleSound.textContent = `Sound: ${game.state.soundOn ? "ON" : "OFF"}`;
-  if (game.state.soundOn) beep();
-  game.save();
-};
+function renderUpgrades() {
+  const list = $("#upgradeList");
+  const ups = Object.values(state.upgradesById);
 
-btnStart.onclick = () => {
-  if (game.state.soundOn) beep();
-  game.start();
-  game.save();
-  render();
-};
+  list.innerHTML = ups.map((u) => {
+    const cost = computeUpgradeCost(u);
+    const afford = state.bc >= cost;
+    return `
+      <div class="item">
+        <div class="left">
+          <div class="name">${u.name} <span class="lvl">Lv ${u.level}</span></div>
+          <div class="desc muted">${u.desc}</div>
+        </div>
+        <button class="btn ${afford ? "" : "ghost"}" data-up="${u.id}">
+          Buy • ${format(cost)}
+        </button>
+      </div>
+    `;
+  }).join("");
 
-btnReset.onclick = () => {
-  const ok = confirm("Reset ALL progress? This cannot be undone.");
-  if (!ok) return;
-  localStorage.clear();
-  location.reload();
-};
+  list.querySelectorAll("button[data-up]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-up");
+      const res = buyUpgrade(state, id);
+      if (!res.ok) return toast(`Need ${format(res.cost || 0)} BC`);
+      saveState(state);
+      toast(`Upgraded!`);
+      renderUpgrades();
+    });
+  });
+}
 
-btnConnect.onclick = async () => {
-  if (game.state.soundOn) beep();
-  try {
-    const { address, chainId } = await connectInjectedWallet();
-    localStorage.setItem("bubachain_wallet", address);
-    walletAddr.textContent = formatAddr(address);
-    chainInfo.textContent = chainId === BASE_CHAIN_ID_HEX ? "Base" : (chainId || "Unknown");
-    btnDisconnect.disabled = false;
-    tip.textContent = "Wallet connected (MVP).";
-  } catch (e) {
-    tip.textContent = hasInjectedWallet()
-      ? `Wallet connect failed: ${e.message}`
-      : "No injected wallet detected. Open inside a wallet-enabled client.";
-  }
-};
+function renderFrame(snapshot) {
+  $("#bc").textContent = format(snapshot.bc);
+  $("#bps").textContent = format(snapshot.bps);
 
-btnDisconnect.onclick = async () => {
-  if (game.state.soundOn) beep();
-  localStorage.removeItem("bubachain_wallet");
-  walletAddr.textContent = "Not connected";
-  chainInfo.textContent = "—";
-  btnDisconnect.disabled = true;
-};
+  const storm = $("#stormCard");
+  const title = $("#stormTitle");
+  const sub = $("#stormSub");
+  const meta = $("#stormMeta");
+  const fill = $("#stormFill");
 
-let adTimer = null;
-btnWatchAd.onclick = () => {
-  if (game.state.soundOn) beep();
-  btnWatchAd.disabled = true;
-  let t = 10;
-  btnWatchAd.textContent = `Watching… ${t}s`;
-  if (adTimer) clearInterval(adTimer);
-  adTimer = setInterval(() => {
-    t -= 1;
-    if (t <= 0) {
-      clearInterval(adTimer);
-      adTimer = null;
-      game.watchAdUnlock(Date.now());
-      btnWatchAd.disabled = false;
-      btnWatchAd.textContent = "Watch Ad (10s)";
-      game.save();
-      render();
-      return;
-    }
-    btnWatchAd.textContent = `Watching… ${t}s`;
-  }, 1000);
-};
-
-btnClaim.onclick = () => {
-  if (game.state.soundOn) beep(620, 60, 0.02);
-  const res = game.claim(Date.now());
-  if (res.ok) {
-    tip.textContent = `Claimed +${res.gained} BC${game.state.stormActive ? " (Storm bonus!)" : ""}`;
-    game.save();
-    render();
-  }
-};
-
-function render() {
-  const now = Date.now();
-
-  balance.textContent = `${Math.floor(game.state.balanceBC)} BC`;
-  unclaimed.textContent = `${Math.floor(game.state.unclaimedBC)} BC`;
-  daily.textContent = `${game.state.activeMinutesToday}/${game.state.dailyLimitMin} min`;
-  rate.textContent = `${game.effectiveRate(now).toFixed(2)} BC/min`;
-
-  // status
-  if (!game.state.running) pillStatus.textContent = "Status: Idle";
-  else if (document.hidden) pillStatus.textContent = "Status: Paused (tab hidden)";
-  else if (game.state.activeMinutesToday >= game.state.dailyLimitMin) pillStatus.textContent = "Status: Daily limit reached";
-  else pillStatus.textContent = "Status: Running";
-
-  // storm UI
-  if (game.state.stormActive) {
-    const left = Math.max(0, game.state.stormEndsAtMs - now);
-    pillStorm.classList.add("stormOn");
-    pillStorm.textContent = `STORM ⚡ ${Math.ceil(left / 1000)}s`;
-    document.body.classList.add("storm");
+  if (snapshot.isStorm) {
+    storm.classList.add("active");
+    title.textContent = "STORM ⚡";
+    sub.textContent = `×${snapshot.stormMult.toFixed(1)} production`;
+    meta.textContent = `${msToHMS(snapshot.stormEndsInMs)} left`;
+    const total = 15 * 1000;
+    const pct = Math.max(0, Math.min(1, snapshot.stormEndsInMs / total));
+    fill.style.width = `${pct * 100}%`;
   } else {
-    pillStorm.classList.remove("stormOn");
-    pillStorm.textContent = "Storm: OFF";
-    document.body.classList.remove("storm");
+    storm.classList.remove("active");
+    title.textContent = "Calm";
+    sub.textContent = "Storms are rare & powerful.";
+    meta.textContent = "";
+    fill.style.width = "0%";
   }
 
-  // claim UI
-  const cdLeft = Math.max(0, game.state.claimCooldownMs - (now - game.state.lastClaimMs));
-  const adLeft = Math.max(0, game.state.adReadyUntilMs - now);
-  btnClaim.disabled = !game.canClaim(now);
+  const ready = isDailyReady(state);
+  const reward = computeDailyReward(state);
+  $("#dailyBtn").disabled = !ready;
+  $("#dailyInfo").textContent = ready
+    ? `Ready: +${format(reward)} BC`
+    : `Not ready yet. Come back later.`;
 
-  if (game.state.unclaimedBC <= 0) claimInfo.textContent = "Earn unclaimed coins first.";
-  else if (cdLeft > 0) claimInfo.textContent = `Claim cooldown: ${Math.ceil(cdLeft / 1000)}s`;
-  else if (adLeft > 0) claimInfo.textContent = game.state.stormActive ? "Ad verified ✅ Claim now (Storm bonus!)" : `Ad verified ✅ Claim within ${Math.ceil(adLeft / 1000)}s`;
-  else claimInfo.textContent = "Watch an ad to unlock Claim.";
-
-  btnToggleSound.textContent = `Sound: ${game.state.soundOn ? "ON" : "OFF"}`;
+  renderUpgrades();
 }
 
-setInterval(() => {
-  game.tick(Date.now());
-  game.save();
-  render();
-}, 1000);
+function start() {
+  buildUI();
 
-document.addEventListener("visibilitychange", render);
+  // Offline catch-up once
+  const off = offlineCatchup(state);
+  if (off.applied > 0) {
+    toast(`Offline: +${format(off.applied)} BC`);
+    saveState(state);
+  }
 
-// restore saved wallet
-const saved = localStorage.getItem("bubachain_wallet");
-if (saved) {
-  walletAddr.textContent = formatAddr(saved);
-  btnDisconnect.disabled = false;
+  renderUpgrades();
+
+  let lastStorm = state.stormActive;
+
+  setInterval(() => {
+    const snap = tick(state);
+
+    if (!lastStorm && snap.isStorm) {
+      boom();
+      toast("Storm hit! ⚡");
+    }
+    lastStorm = snap.isStorm;
+
+    if (Math.random() < 0.1) saveState(state);
+    renderFrame(snap);
+  }, 250);
+
+  window.addEventListener("beforeunload", () => saveState(state));
 }
 
-render();
+start();

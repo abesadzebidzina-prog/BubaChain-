@@ -5,115 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>BubaChain</title>
 
-  <!-- Good embed hygiene -->
-  <meta name="description" content="A zen idle game where time turns into progress. Earn BubaCoins, upgrade your miner, and unleash powerful Storms." />
-
+  <meta name="description" content="A calm idle mini app with rare, powerful Storms. Earn BubaCoins, buy upgrades, and claim daily rewards." />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <main class="wrap">
-    <header class="top">
-      <div>
-        <h1>BubaChain</h1>
-        <p class="sub">
-          A zen idle game where time turns into progress. Earn <b>BubaCoins (BC)</b>, upgrade your miner, and unleash powerful Storms.
-        </p>
-      </div>
-      <div class="pills">
-        <div id="pillStorm" class="pill">Storm: OFF</div>
-        <div id="pillStatus" class="pill">Loading…</div>
-      </div>
-    </header>
-
-    <!-- Intro (2B: one-screen quick explanation) -->
-    <section id="intro" class="card intro">
-      <h2>How it works</h2>
-      <ul class="bullets">
-        <li>Keep the app active to generate <b>Unclaimed BC</b>.</li>
-        <li>Watch a short <b>Ad</b> to unlock <b>Claim</b>.</li>
-        <li>Buy upgrades to increase your mining rate.</li>
-        <li><b>Storms</b> are rare and powerful: big boosts + epic visuals.</li>
-      </ul>
-      <div class="row">
-        <button id="btnCloseIntro" class="btn primary">Start playing</button>
-        <button id="btnToggleSound" class="btn">Sound: ON</button>
-      </div>
-      <p class="fine">
-        BubaCoins (BC) are in-game reward points with no guaranteed monetary value.
-      </p>
-    </section>
-
-    <!-- Main HUD -->
-    <section class="grid">
-      <div class="card">
-        <div class="kv">
-          <div>
-            <div class="label">Balance</div>
-            <div id="balance" class="big">0 BC</div>
-          </div>
-          <div>
-            <div class="label">Daily</div>
-            <div id="daily" class="value">0/360 min</div>
-          </div>
-        </div>
-
-        <div class="kv">
-          <div>
-            <div class="label">Unclaimed</div>
-            <div id="unclaimed" class="big">0 BC</div>
-          </div>
-          <div>
-            <div class="label">Rate</div>
-            <div id="rate" class="value">1 BC/min</div>
-          </div>
-        </div>
-
-        <div class="row">
-          <button id="btnStart" class="btn primary">Start Mining</button>
-          <button id="btnReset" class="btn danger">Reset</button>
-        </div>
-
-        <div class="note" id="tip"></div>
-      </div>
-
-      <div class="card">
-        <h3 class="h3">Wallet (Base / EVM)</h3>
-        <div class="row">
-          <button id="btnConnect" class="btn secondary">Connect Wallet</button>
-          <button id="btnDisconnect" class="btn" disabled>Disconnect</button>
-        </div>
-        <div class="meta">
-          <div><span class="k">Farcaster</span> <span id="fcUser" class="v">Not detected</span></div>
-          <div><span class="k">Wallet</span> <span id="walletAddr" class="v">Not connected</span></div>
-          <div><span class="k">Chain</span> <span id="chainInfo" class="v">—</span></div>
-        </div>
-
-        <hr class="hr"/>
-
-        <h3 class="h3">Claim (Ad required)</h3>
-        <div class="row">
-          <button id="btnWatchAd" class="btn">Watch Ad (10s)</button>
-          <button id="btnClaim" class="btn primary" disabled>Claim</button>
-        </div>
-        <div id="claimInfo" class="fine">Watch an ad to unlock Claim.</div>
-      </div>
-    </section>
-
-    <section class="card">
-      <h3 class="h3">Upgrades</h3>
-      <div class="upgrades" id="upgradeList"></div>
-      <div class="fine">
-        Progress is upgrade-only (no levels). Storms are rare and strong. Daily rewards + long-term goals keep it exciting.
-      </div>
-    </section>
-
-    <footer class="foot">
-      <div class="fine">
-        Mini App ready: calls <code>sdk.actions.ready()</code> when loaded. :contentReference[oaicite:1]{index=1}
-      </div>
-    </footer>
-  </main>
-
+  <div id="app"></div>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
