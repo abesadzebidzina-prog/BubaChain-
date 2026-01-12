@@ -1,0 +1,17 @@
+{
+  "accountAssociation": {
+    "header": "PASTE_HEADER_HERE",
+    "payload": "PASTE_PAYLOAD_HERE",
+    "signature": "PASTE_SIGNATURE_HERE"
+  },
+  "miniapp": {
+    "version": "1",
+    "name": "BubaChain",
+    "homeUrl": "https://DEINE-DOMAIN.TLD/",
+    "iconUrl": "https://DEINE-DOMAIN.TLD/icon.png",
+    "splashImageUrl": "https://DEINE-DOMAIN.TLD/splash.png",
+    "splashBackgroundColor": "#0b0f1a",
+    "primaryCategory": "games",
+    "tags": ["idle", "game", "bubachain"]
+  }
+}
