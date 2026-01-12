@@ -1,13 +1,13 @@
 {
   "accountAssociation": {
-    "header": "TODO",
-    "payload": "TODO",
-    "signature": "TODO"
+    "header": "HIER_HEADER_EINFUEGEN",
+    "payload": "HIER_PAYLOAD_EINFUEGEN",
+    "signature": "HIER_SIGNATURE_EINFUEGEN"
   },
   "miniapp": {
     "version": "1",
     "name": "BubaChain",
-    "homeUrl": "https://DEINE-LIVE-URL/",
-    "iconUrl": "https://DEINE-LIVE-URL/icon.png"
+    "homeUrl": "https://buba-chain.vercel.app/",
+    "iconUrl": "https://buba-chain.vercel.app/icon.png"
   }
 }
