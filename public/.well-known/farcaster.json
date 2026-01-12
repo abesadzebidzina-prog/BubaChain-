@@ -3,8 +3,7 @@
     "header": "eyJmaWQiOjIyMTE0MTAsInR5cGUiOiJhdXRoIiwia2V5IjoiMHhiMzVDYjY5Mzk5MDZFNjc4NUUxNTg2ZDVBNDg1ZDhmOEU4MTAzNDNiIn0",
     "payload": "eyJkb21haW4iOiJidWJhLWNoYWluLnZlcmNlbC5hcHAifQ",
     "signature": "RiFiCEs5+D25bGqTJz5tMSFVRoLJJPEV/xUa1kyzTUAlW7c9SC5AgEkIVQr6nn4cTVaZeScJx0jGK4NLAYAlnRs="
-  }
-}
+  },
   "miniapp": {
     "version": "1",
     "name": "BubaChain",
