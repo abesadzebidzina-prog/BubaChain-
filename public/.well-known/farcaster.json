@@ -6,24 +6,8 @@
   },
   "miniapp": {
     "version": "1",
-    # im Projektroot
-mkdir -p public/.well-known
-
-# falls du die Datei irgendwo anders hast, such sie:
-find . -name "farcaster.json" -maxdepth 6
-
-# wenn nix gefunden: Datei neu anlegen (erstmal als Platzhalter)
-cat > public/.well-known/farcaster.json <<'JSON'
-{
-  "accountAssociation": {
-    "header": "TODO",
-    "payload": "TODO",
-    "signature": "TODO"
-  },
-  "miniapp": {
-    "version": "1",
     "name": "BubaChain",
-    "homeUrl": "https://DEINE-DOMAIN/",
-    "iconUrl": "https://DEINE-DOMAIN/icon.png"
+    "homeUrl": "https://DEINE-LIVE-URL/",
+    "iconUrl": "https://DEINE-LIVE-URL/icon.png"
   }
 }
