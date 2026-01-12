@@ -1,0 +1,6 @@
+"dependencies": {
+  "@farcaster/miniapp-sdk": "latest"
+},
+"devDependencies": {
+  "vite": "latest"
+}

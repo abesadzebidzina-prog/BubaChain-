@@ -1,2 +1,11 @@
-# BubaChain-
-BubaChain is an innovative blockchain-powered app designed for users to earn passive rewards simply by keeping the app running. Built on cutting-edge decentralized technology, BubaChain leverages the power of distributed networks to create a secure, transparent, and profitable experience.
+# BubaChain
+
+BubaChain is a blockchain-inspired mini app where users earn rewards while the app is running.
+
+## Concept
+- Earn while active
+- Simple mining-style gameplay
+- Long-term progress
+
+## Status
+Early development
