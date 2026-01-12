@@ -1,17 +1,29 @@
 {
   "accountAssociation": {
-    "header": "PASTE_HEADER_HERE",
-    "payload": "PASTE_PAYLOAD_HERE",
-    "signature": "PASTE_SIGNATURE_HERE"
+    "header": "TODO",
+    "payload": "TODO",
+    "signature": "TODO"
+  },
+  "miniapp": {
+    "version": "1",
+    # im Projektroot
+mkdir -p public/.well-known
+
+# falls du die Datei irgendwo anders hast, such sie:
+find . -name "farcaster.json" -maxdepth 6
+
+# wenn nix gefunden: Datei neu anlegen (erstmal als Platzhalter)
+cat > public/.well-known/farcaster.json <<'JSON'
+{
+  "accountAssociation": {
+    "header": "TODO",
+    "payload": "TODO",
+    "signature": "TODO"
   },
   "miniapp": {
     "version": "1",
     "name": "BubaChain",
-    "homeUrl": "https://DEINE-DOMAIN.TLD/",
-    "iconUrl": "https://DEINE-DOMAIN.TLD/icon.png",
-    "splashImageUrl": "https://DEINE-DOMAIN.TLD/splash.png",
-    "splashBackgroundColor": "#0b0f1a",
-    "primaryCategory": "games",
-    "tags": ["idle", "game", "bubachain"]
+    "homeUrl": "https://DEINE-DOMAIN/",
+    "iconUrl": "https://DEINE-DOMAIN/icon.png"
   }
 }
