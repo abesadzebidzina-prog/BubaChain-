@@ -1,4 +1,4 @@
-const STORAGE_KEY = "bubachain:v1";
+const STORAGE_KEY = "bubachain:v2";
 const now = () => Date.now();
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 
@@ -21,12 +21,12 @@ export const msToHMS = (ms) => {
 };
 
 const defaultUpgrades = () => ([
-  { id:"mining_rig", name:"Mining Rig", desc:"+0.2 BC/s per level", level:0, baseCost:25, costMult:1.18, effect:(lvl)=>0.2*lvl },
-  { id:"generator",  name:"Generator", desc:"+1.0 BC/s per level", level:0, baseCost:120,costMult:1.22, effect:(lvl)=>1.0*lvl },
-  { id:"storm_magnet",name:"Storm Magnet",desc:"+0.25% storm chance/min per level", level:0, baseCost:180,costMult:1.25, effect:(lvl)=>0.0025*lvl },
-  { id:"storm_core", name:"Storm Core", desc:"+x0.5 storm multiplier per level", level:0, baseCost:260,costMult:1.28, effect:(lvl)=>0.5*lvl },
-  { id:"daily_booster",name:"Daily Booster",desc:"+25% daily reward per level", level:0, baseCost:150,costMult:1.20, effect:(lvl)=>0.25*lvl },
-  { id:"vault", name:"Vault", desc:"Offline cap +30 min per level (max 12h)", level:0, baseCost:220,costMult:1.20, effect:(lvl)=>clamp(30*60*1000*lvl,0,12*60*60*1000) },
+  { id:"mining_rig", name:"Mining Rig", desc:"+0.2 BC/s per level", level:0, baseCost:25,  costMult:1.18, effect:(lvl)=>0.2*lvl },
+  { id:"generator",  name:"Generator",  desc:"+1.0 BC/s per level", level:0, baseCost:120, costMult:1.22, effect:(lvl)=>1.0*lvl },
+  { id:"storm_magnet",name:"Storm Magnet",desc:"+0.25% storm chance/min per level", level:0, baseCost:180, costMult:1.25, effect:(lvl)=>0.0025*lvl },
+  { id:"storm_core", name:"Storm Core", desc:"+x0.5 storm multiplier per level", level:0, baseCost:260, costMult:1.28, effect:(lvl)=>0.5*lvl },
+  { id:"daily_booster",name:"Daily Booster",desc:"+25% daily reward per level", level:0, baseCost:150, costMult:1.20, effect:(lvl)=>0.25*lvl },
+  { id:"vault", name:"Vault", desc:"Offline cap +30 min per level (max 12h)", level:0, baseCost:220, costMult:1.20, effect:(lvl)=>clamp(30*60*1000*lvl,0,12*60*60*1000) },
 ]);
 
 export function computeUpgradeCost(upg){
@@ -50,12 +50,12 @@ function computeStormMultiplier(state){
   return base + add;
 }
 
-export function computeDailyReward(state){
+export function computeDailyReward(state, { walletMult = 1 } = {}){
   const base = 50;
   const totalLvls = Object.values(state.upgradesById).reduce((a,u)=>a+u.level,0);
   const scaling = totalLvls * 8;
   const booster = 1 + state.upgradesById.daily_booster.effect(state.upgradesById.daily_booster.level);
-  return Math.floor((base + scaling) * booster);
+  return Math.floor((base + scaling) * booster * walletMult);
 }
 
 export function isDailyReady(state){
@@ -67,7 +67,7 @@ function makeState(){
   const upgrades = defaultUpgrades();
   const upgradesById = Object.fromEntries(upgrades.map(u=>[u.id,u]));
   return {
-    version:1,
+    version:2,
     bc:0,
     totalEarned:0,
     lastTickAt: now(),
@@ -147,19 +147,19 @@ function endStormIfNeeded(state){
   return null;
 }
 
-export function offlineCatchup(state){
+export function offlineCatchup(state, { walletMult = 1 } = {}){
   const elapsed = Math.max(0, now() - (state.lastTickAt || now()));
   const cap = state.upgradesById.vault.effect(state.upgradesById.vault.level);
   const capped = cap > 0 ? Math.min(elapsed, cap) : 0;
   if(capped <= 0) return { applied:0, elapsedMs:elapsed, cappedMs:0 };
 
   const bps = computeBaseBps(state);
-  const earned = bps * (capped/1000);
+  const earned = bps * walletMult * (capped/1000);
   applyEarnings(state, earned);
   return { applied:earned, elapsedMs:elapsed, cappedMs:capped };
 }
 
-export function tick(state){
+export function tick(state, { walletMult = 1 } = {}){
   const t = now();
   const dtMs = Math.max(0, t - state.lastTickAt);
   state.lastTickAt = t;
@@ -170,8 +170,10 @@ export function tick(state){
   if(stormEnd) events.push(stormEnd);
 
   const baseBps = computeBaseBps(state);
-  const mult = state.stormActive ? computeStormMultiplier(state) : 1;
-  applyEarnings(state, baseBps * mult * (dtMs/1000));
+  const stormMult = state.stormActive ? computeStormMultiplier(state) : 1;
+
+  // walletMult applies to ALL earnings (connected/verified bonus)
+  applyEarnings(state, baseBps * stormMult * walletMult * (dtMs/1000));
 
   const pm = computeStormChancePerMinute(state);
   const pTick = 1 - Math.pow(1 - pm, dtMs/(60*1000));
@@ -181,12 +183,13 @@ export function tick(state){
 
   return {
     bc: state.bc,
-    bps: baseBps,
+    bps: baseBps * walletMult,
+    rawBps: baseBps,
+    walletMult,
     isStorm: state.stormActive,
     stormEndsInMs: state.stormActive ? Math.max(0, state.stormEndsAt - t) : 0,
     stormMult: computeStormMultiplier(state),
     dailyReady: isDailyReady(state),
-    dailyReward: computeDailyReward(state),
     events,
   };
 }
@@ -201,9 +204,9 @@ export function buyUpgrade(state, id){
   return { ok:true, id, newLevel:u.level, cost };
 }
 
-export function claimDaily(state){
+export function claimDaily(state, { walletMult = 1 } = {}){
   if(!isDailyReady(state)) return { ok:false, reason:"not_ready" };
-  const reward = computeDailyReward(state);
+  const reward = computeDailyReward(state, { walletMult });
   state.dailyLastClaimAt = now();
   applyEarnings(state, reward);
   return { ok:true, reward };

@@ -13,22 +13,43 @@ import {
   format,
 } from "./game.js";
 import { initMiniApp } from "./miniapp.js";
+import { createWalletController } from "./wallet.js";
 
 const state = loadState();
 initMiniApp().catch(() => {});
-
 const $ = (sel) => document.querySelector(sel);
 
+function walletMultiplier(walletState) {
+  // Rewards:
+  // - Connected: +10%
+  // - Verified (signed): +25%
+  if (!walletState?.connected) return 1;
+  return walletState.verified ? 1.25 : 1.10;
+}
+
+function toast(msg) {
+  const el = $("#toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 1700);
+}
+
+function boom() {
+  const el = $("#boom");
+  el.classList.remove("go");
+  void el.offsetWidth;
+  el.classList.add("go");
+}
+
 function buildUI() {
-  const root = $("#app");
-  root.innerHTML = `
+  $("#app").innerHTML = `
     <div class="wrap">
       <header class="top">
         <div class="title">
           <div class="logo">⚡</div>
           <div>
             <h1>BubaChain</h1>
-            <div class="sub">Upgrade-only • Rare Storms • Daily</div>
+            <div class="sub">Upgrade-only • Rare Storms • Daily • Wallet</div>
           </div>
         </div>
         <div class="stats">
@@ -64,6 +85,27 @@ function buildUI() {
         </div>
       </section>
 
+      <section class="card">
+        <div class="h2">Wallet (Base / EVM)</div>
+
+        <div class="row" style="margin-top:8px;">
+          <div class="muted" id="walletMeta">Not connected</div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+            <button class="btn" id="walletConnectBtn">Connect</button>
+            <button class="btn ghost" id="walletSwitchBtn" disabled>Switch to Base</button>
+            <button class="btn ghost" id="walletSignBtn" disabled>Sign to Verify</button>
+          </div>
+        </div>
+
+        <div class="muted" style="margin-top:10px;" id="walletBonusInfo">Wallet bonus: none</div>
+
+        <div class="h2" style="margin-top:14px;">Onchain Prep (no tx)</div>
+        <div class="row" style="margin-top:8px;">
+          <div class="muted" id="onchainMeta">Not ready</div>
+          <button class="btn ghost" id="gasBtn" disabled>Estimate Gas</button>
+        </div>
+      </section>
+
       <section class="card upgrades">
         <div class="h2">Upgrades</div>
         <div class="list" id="upgradeList"></div>
@@ -77,27 +119,6 @@ function buildUI() {
       <div class="boom" id="boom"></div>
     </div>
   `;
-
-  $("#dailyBtn").addEventListener("click", () => {
-    const res = claimDaily(state);
-    if (!res.ok) return toast("Daily not ready yet.");
-    saveState(state);
-    toast(`+${format(res.reward)} BC claimed!`);
-  });
-}
-
-function toast(msg) {
-  const el = $("#toast");
-  el.textContent = msg;
-  el.classList.add("show");
-  setTimeout(() => el.classList.remove("show"), 1600);
-}
-
-function boom() {
-  const el = $("#boom");
-  el.classList.remove("go");
-  void el.offsetWidth; // reflow
-  el.classList.add("go");
 }
 
 function renderUpgrades() {
@@ -109,7 +130,7 @@ function renderUpgrades() {
     const afford = state.bc >= cost;
     return `
       <div class="item">
-        <div class="left">
+        <div>
           <div class="name">${u.name} <span class="lvl">Lv ${u.level}</span></div>
           <div class="desc muted">${u.desc}</div>
         </div>
@@ -126,13 +147,13 @@ function renderUpgrades() {
       const res = buyUpgrade(state, id);
       if (!res.ok) return toast(`Need ${format(res.cost || 0)} BC`);
       saveState(state);
-      toast(`Upgraded!`);
+      toast("Upgrade purchased");
       renderUpgrades();
     });
   });
 }
 
-function renderFrame(snapshot) {
+function renderFrame(snapshot, walletState) {
   $("#bc").textContent = format(snapshot.bc);
   $("#bps").textContent = format(snapshot.bps);
 
@@ -147,7 +168,7 @@ function renderFrame(snapshot) {
     title.textContent = "STORM ⚡";
     sub.textContent = `×${snapshot.stormMult.toFixed(1)} production`;
     meta.textContent = `${msToHMS(snapshot.stormEndsInMs)} left`;
-    const total = 15 * 1000;
+    const total = 15000;
     const pct = Math.max(0, Math.min(1, snapshot.stormEndsInMs / total));
     fill.style.width = `${pct * 100}%`;
   } else {
@@ -158,12 +179,14 @@ function renderFrame(snapshot) {
     fill.style.width = "0%";
   }
 
-  const ready = isDailyReady(state);
-  const reward = computeDailyReward(state);
-  $("#dailyBtn").disabled = !ready;
-  $("#dailyInfo").textContent = ready
-    ? `Ready: +${format(reward)} BC`
-    : `Not ready yet. Come back later.`;
+  const mult = walletMultiplier(walletState);
+  const dailyReady = isDailyReady(state);
+  const dailyReward = computeDailyReward(state, { walletMult: mult });
+
+  $("#dailyBtn").disabled = !dailyReady;
+  $("#dailyInfo").textContent = dailyReady
+    ? `Ready: +${format(dailyReward)} BC`
+    : "Not ready yet. Come back later.";
 
   renderUpgrades();
 }
@@ -171,19 +194,119 @@ function renderFrame(snapshot) {
 function start() {
   buildUI();
 
-  // Offline catch-up once
-  const off = offlineCatchup(state);
+  const wallet = createWalletController({
+    onUpdate: (w) => {
+      const meta = $("#walletMeta");
+      const connectBtn = $("#walletConnectBtn");
+      const switchBtn = $("#walletSwitchBtn");
+      const signBtn = $("#walletSignBtn");
+      const bonusInfo = $("#walletBonusInfo");
+      const onchainMeta = $("#onchainMeta");
+      const gasBtn = $("#gasBtn");
+
+      if (!w.available) {
+        meta.textContent = "No wallet provider found (open in Farcaster or install a wallet).";
+        connectBtn.disabled = true;
+        switchBtn.disabled = true;
+        signBtn.disabled = true;
+        bonusInfo.textContent = "Wallet bonus: none";
+        onchainMeta.textContent = "Not ready";
+        gasBtn.disabled = true;
+        return;
+      }
+
+      if (!w.connected) {
+        meta.textContent = "Not connected";
+        connectBtn.textContent = "Connect";
+        switchBtn.disabled = true;
+        signBtn.disabled = true;
+        bonusInfo.textContent = "Wallet bonus: none";
+        onchainMeta.textContent = "Connect wallet to prepare onchain";
+        gasBtn.disabled = true;
+      } else {
+        meta.textContent = `${w.addressShort} • ${w.chainName} • ${w.verified ? "Verified" : "Unverified"}`;
+        connectBtn.textContent = "Disconnect";
+
+        const onBase = (w.chainId === wallet.BASE_MAINNET.chainId);
+        switchBtn.disabled = onBase;
+        signBtn.disabled = false;
+
+        const mult = walletMultiplier(w);
+        bonusInfo.textContent = w.verified
+          ? `Wallet bonus: Verified ×${mult.toFixed(2)} earnings & daily`
+          : `Wallet bonus: Connected ×${mult.toFixed(2)} earnings & daily (sign to verify for more)`;
+
+        onchainMeta.textContent = onBase ? "Ready (Base)" : "Switch to Base to be ready";
+        gasBtn.disabled = !onBase;
+      }
+    }
+  });
+
+  wallet.refresh();
+
+  $("#walletConnectBtn").addEventListener("click", async () => {
+    try {
+      if (!wallet.state.connected) {
+        await wallet.connect();
+        toast("Wallet connected");
+      } else {
+        await wallet.disconnect();
+        toast("Wallet disconnected");
+      }
+    } catch (e) {
+      toast(e?.message || "Wallet error");
+    }
+  });
+
+  $("#walletSwitchBtn").addEventListener("click", async () => {
+    try {
+      await wallet.switchToBase();
+      toast("Switched to Base");
+    } catch (e) {
+      toast(e?.message || "Switch failed");
+    }
+  });
+
+  $("#walletSignBtn").addEventListener("click", async () => {
+    try {
+      const res = await wallet.signToVerify();
+      if (res?.ok) toast("Verified ✅");
+    } catch (e) {
+      toast(e?.message || "Sign failed");
+    }
+  });
+
+  $("#gasBtn").addEventListener("click", async () => {
+    try {
+      const gasHex = await wallet.estimateGasTest();
+      const gas = parseInt(gasHex, 16);
+      toast(`EstimateGas OK: ${gas}`);
+    } catch (e) {
+      toast(e?.message || "Estimate gas failed");
+    }
+  });
+
+  // Offline catch-up (uses wallet bonus if already connected/verified)
+  const mult0 = walletMultiplier(wallet.state);
+  const off = offlineCatchup(state, { walletMult: mult0 });
   if (off.applied > 0) {
     toast(`Offline: +${format(off.applied)} BC`);
     saveState(state);
   }
 
-  renderUpgrades();
+  $("#dailyBtn").addEventListener("click", () => {
+    const mult = walletMultiplier(wallet.state);
+    const res = claimDaily(state, { walletMult: mult });
+    if (!res.ok) return toast("Daily not ready yet.");
+    saveState(state);
+    toast(`+${format(res.reward)} BC claimed!`);
+  });
 
   let lastStorm = state.stormActive;
 
   setInterval(() => {
-    const snap = tick(state);
+    const mult = walletMultiplier(wallet.state);
+    const snap = tick(state, { walletMult: mult });
 
     if (!lastStorm && snap.isStorm) {
       boom();
@@ -192,7 +315,7 @@ function start() {
     lastStorm = snap.isStorm;
 
     if (Math.random() < 0.1) saveState(state);
-    renderFrame(snap);
+    renderFrame(snap, wallet.state);
   }, 250);
 
   window.addEventListener("beforeunload", () => saveState(state));
