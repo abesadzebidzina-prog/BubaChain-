@@ -1,15 +1,8 @@
 {
   "accountAssociation": {
-    "header": "eyJmYWQiOiJjYTM0NTAsInR5cCI6IkpXVCJ9",
-    "payload": "eyJkb21haW4iOiJidWJhLWNoYWluLnZlcmNlbC5hcHAifQ",
-    "signature": "RiFICeS5+DZ5bqgTz5tMSF..."
-  }
-}
-{
-  "accountAssociation": {
-    "header": "HIER_HEADER_EINFUEGEN",
-    "payload": "HIER_PAYLOAD_EINFUEGEN",
-    "signature": "HIER_SIGNATURE_EINFUEGEN"
+    "header": "",
+    "payload": "",
+    "signature": ""
   },
   "miniapp": {
     "version": "1",
